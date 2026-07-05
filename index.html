@@ -1,0 +1,772 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>In The Black | Markets Terminal</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        /* Bloomberg-Inspired CSS Variables */
+        :root {
+            --bbg-bg: #050505;
+            --bbg-panel: #111111;
+            --bbg-border: #2a2a2a;
+            --bbg-text-main: #f5f5f5;
+            --bbg-text-muted: #888888;
+            --bbg-orange: #f37021;
+            --bbg-green: #00e676;
+            --bbg-red: #ff3b30;
+            --bbg-blue: #007aff;
+            --font-stack: 'Neue Haas Grotesk', 'Aktiv Grotesk', 'Inter', -apple-system, sans-serif;
+        }
+
+        * { box-sizing: border-box; font-family: var(--font-stack); }
+        
+        body { 
+            background-color: var(--bbg-bg); 
+            color: var(--bbg-text-main); 
+            margin: 0; 
+            padding: 0; 
+            font-size: 14px;
+            overflow-x: hidden;
+        }
+
+        h1, h2, h3, h4 { margin-top: 0; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
+        h2 { font-size: 1.2rem; color: var(--bbg-orange); border-bottom: 1px solid var(--bbg-border); padding-bottom: 10px; margin-bottom: 15px;}
+        h3 { font-size: 0.9rem; color: var(--bbg-text-muted); }
+
+        /* Universal Top Nav */
+        .top-nav {
+            background: #000;
+            border-bottom: 1px solid var(--bbg-border);
+            padding: 10px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .brand { font-weight: 800; font-size: 1.1rem; letter-spacing: 1px; }
+        .brand span { color: var(--bbg-orange); }
+
+        /* Scrolling Ticker Tape */
+        .ticker-wrap {
+            width: 100%;
+            overflow: hidden;
+            background: var(--bbg-panel);
+            border-bottom: 1px solid var(--bbg-border);
+            padding: 6px 0;
+            white-space: nowrap;
+            font-variant-numeric: tabular-nums;
+        }
+        .ticker {
+            display: inline-block;
+            white-space: nowrap;
+            animation: tickerScroll 40s linear infinite;
+        }
+        .ticker:hover { animation-play-state: paused; }
+        @keyframes tickerScroll {
+            0% { transform: translateX(0); }
+            100% { transform: translateX(-50%); }
+        }
+        .ticker-item {
+            display: inline-flex;
+            align-items: center;
+            padding: 0 20px;
+            font-size: 0.85rem;
+            border-right: 1px solid var(--bbg-border);
+        }
+        .ticker-item .symbol { font-weight: bold; margin-right: 8px; color: var(--bbg-text-main); }
+        .ticker-item .price { margin-right: 8px; }
+
+        /* Layout & Screens */
+        .main-container { padding: 20px; }
+        .screen { display: none; }
+        .screen.active { display: block; animation: fadeIn 0.3s ease; }
+        .grid-container { display: grid; grid-template-columns: 2fr 1fr; gap: 15px; }
+        
+        .panel { 
+            background: var(--bbg-panel); 
+            border: 1px solid var(--bbg-border); 
+            padding: 15px; 
+            border-radius: 2px;
+        }
+
+        /* Forms & Buttons */
+        .auth-container { max-width: 400px; margin: 80px auto; background: var(--bbg-panel); padding: 30px; border: 1px solid var(--bbg-border); border-top: 4px solid var(--bbg-orange); }
+        input, select, button { width: 100%; padding: 10px; margin: 8px 0; border: 1px solid var(--bbg-border); background: var(--bbg-bg); color: white; font-size: 0.9rem; font-family: var(--font-stack); border-radius: 0; outline: none; }
+        input:focus, select:focus { border-color: var(--bbg-orange); }
+        
+        button { font-weight: 600; cursor: pointer; transition: 0.15s; text-transform: uppercase; letter-spacing: 0.5px; }
+        button:hover { filter: brightness(1.2); }
+        
+        .btn-primary { background: var(--bbg-orange); color: #000; border: 1px solid var(--bbg-orange); }
+        .btn-sell { background: transparent; color: var(--bbg-red); border: 1px solid var(--bbg-red); }
+        .btn-sell:hover { background: var(--bbg-red); color: white; }
+        .btn-buy { background: transparent; color: var(--bbg-green); border: 1px solid var(--bbg-green); }
+        .btn-buy:hover { background: var(--bbg-green); color: black; }
+        .btn-outline { background: transparent; border: 1px solid var(--bbg-border); color: var(--bbg-text-main); }
+        .btn-outline:hover { border-color: var(--bbg-text-main); }
+
+        /* Tables (Dense, Tabular) */
+        table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; margin-top: 10px; }
+        th, td { text-align: right; padding: 8px 10px; border-bottom: 1px solid var(--bbg-border); font-size: 0.85rem; }
+        th { color: var(--bbg-text-muted); font-size: 0.75rem; text-transform: uppercase; font-weight: 500; }
+        th:first-child, td:first-child { text-align: left; }
+        tr:hover td { background-color: rgba(255,255,255,0.03); }
+
+        /* Typography Utilities */
+        .text-green { color: var(--bbg-green); }
+        .text-red { color: var(--bbg-red); }
+        .text-orange { color: var(--bbg-orange); }
+        .font-mono { font-variant-numeric: tabular-nums; font-family: 'SF Mono', Consolas, monospace; }
+
+        /* Header Bar specific to screens */
+        .dashboard-header { display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 20px; padding-bottom: 15px; border-bottom: 1px solid var(--bbg-border); }
+        .dashboard-header h2 { border: none; padding: 0; margin: 0 0 5px 0; font-size: 1.5rem; color: var(--bbg-text-main); }
+        
+        /* Timer */
+        .timer-display { font-size: 2rem; font-weight: 700; color: var(--bbg-orange); font-variant-numeric: tabular-nums; letter-spacing: 1px; }
+        .timer-controls { display: flex; gap: 5px; margin-top: 5px; }
+
+        /* Chart */
+        .chart-container { width: 100%; height: 300px; margin-bottom: 15px; border: 1px solid var(--bbg-border); background: var(--bbg-bg); padding: 10px;}
+
+        /* Notifications */
+        #notification-area { position: fixed; bottom: 20px; right: 20px; z-index: 1000; width: 320px; }
+        .toast { background: var(--bbg-panel); border-left: 4px solid var(--bbg-orange); color: white; padding: 12px 15px; margin-top: 10px; font-size: 0.85rem; box-shadow: 0 4px 12px rgba(0,0,0,0.5); animation: slideIn 0.3s ease-out; }
+        
+        /* Winner Screen */
+        .winner-screen { text-align: center; padding: 60px 20px; }
+        .winner-screen h1 { font-size: 3rem; color: var(--bbg-text-main); border-bottom: 2px solid var(--bbg-orange); display: inline-block; padding-bottom: 10px; margin-bottom: 40px;}
+        .winner-card { background: var(--bbg-panel); border: 1px solid var(--bbg-border); padding: 20px; margin: 10px auto; max-width: 600px; display: flex; justify-content: space-between; align-items: center; text-align: left; }
+        .winner-card.first-place { border-color: var(--bbg-orange); background: #1a0c00; transform: scale(1.02); }
+        .winner-card h3 { color: var(--bbg-text-main); font-size: 1.2rem; margin: 0; }
+
+        @keyframes slideIn { from { transform: translateX(100%); } to { transform: translateX(0); } }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+    </style>
+</head>
+<body>
+
+    <header class="top-nav">
+        <div class="brand">IN THE BLACK <span>| TERMINAL</span></div>
+        <div id="global-status" style="font-size: 0.85rem; font-weight: 600; color: var(--bbg-text-muted);">SYSTEM READY</div>
+    </header>
+
+    <div class="ticker-wrap">
+        <div class="ticker" id="ticker-bar">
+            </div>
+    </div>
+
+    <div id="notification-area"></div>
+
+    <div class="main-container">
+        
+        <div id="login-screen" class="screen active">
+            <div class="auth-container">
+                <h2>Terminal Authentication</h2>
+                <p style="color: var(--bbg-text-muted); font-size: 0.85rem; margin-bottom: 20px;">Select operator role to initialize session.</p>
+                <select id="role-select">
+                    <option value="admin">SYSADMIN (Instructor)</option>
+                    <option value="team1">DESK 1: Alpha Capital</option>
+                    <option value="team2">DESK 2: Beta Ventures</option>
+                    <option value="team3">DESK 3: Gamma Holdings</option>
+                </select>
+                <button class="btn-primary" onclick="login()">Initialize Terminal</button>
+            </div>
+        </div>
+
+        <div id="participant-screen" class="screen">
+            <div class="dashboard-header">
+                <div>
+                    <h2 id="team-name-display">DESK DASHBOARD</h2>
+                    <div style="font-size: 0.85rem; color: var(--bbg-text-muted);">
+                        MARKET STATUS: <strong id="market-status" class="text-green">OPEN</strong> | 
+                        SIM DAY: <strong id="sim-day-display">1</strong>
+                    </div>
+                </div>
+                <div style="text-align: center;">
+                    <div style="font-size: 0.75rem; color: var(--bbg-text-muted); text-transform: uppercase;">Time Remaining</div>
+                    <div class="timer-display" id="participant-timer">00:00</div>
+                </div>
+                <div style="text-align: right;">
+                    <div style="font-size: 0.75rem; color: var(--bbg-text-muted); text-transform: uppercase;">Purchasing Power</div>
+                    <div id="cash-balance" class="font-mono text-green" style="font-size: 1.5rem; font-weight: 700;">$100,000.00</div>
+                    <button class="btn-outline" onclick="logout()" style="width: auto; padding: 4px 12px; margin-top: 5px; font-size: 0.75rem;">DISCONNECT</button>
+                </div>
+            </div>
+
+            <div class="grid-container">
+                <div class="panel">
+                    <h3>EQUITIES OVERVIEW</h3>
+                    <div class="chart-container">
+                        <canvas id="marketChart"></canvas>
+                    </div>
+                    <div style="max-height: 350px; overflow-y: auto;">
+                        <table id="market-table">
+                            <thead>
+                                <tr>
+                                    <th>Ticker</th>
+                                    <th>Company</th>
+                                    <th>Price</th>
+                                    <th>Chg (Day)</th>
+                                    <th style="text-align: center;">Action</th>
+                                </tr>
+                            </thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                </div>
+                
+                <div class="panel" style="display: flex; flex-direction: column;">
+                    <h3>PORTFOLIO METRICS</h3>
+                    <div style="border-bottom: 1px solid var(--bbg-border); padding-bottom: 15px; margin-bottom: 15px;">
+                        <div style="font-size: 0.75rem; color: var(--bbg-text-muted);">NET LIQUIDATING VALUE</div>
+                        <div id="portfolio-value" class="font-mono" style="font-size: 1.8rem; font-weight: bold; margin-bottom: 10px;">$100,000.00</div>
+                        
+                        <div style="display: flex; justify-content: space-between; font-size: 0.85rem;">
+                            <span>INCEPTION RET: <strong id="long-term-return" class="font-mono">0.00%</strong></span>
+                            <span>5-DAY RET: <strong id="short-term-return" class="font-mono">0.00%</strong></span>
+                        </div>
+                    </div>
+                    
+                    <h3 style="margin-top: 5px;">CURRENT HOLDINGS</h3>
+                    <div style="flex-grow: 1; overflow-y: auto;">
+                        <table id="portfolio-table">
+                            <thead>
+                                <tr>
+                                    <th>Asset</th>
+                                    <th>Pos</th>
+                                    <th>Avg Px</th>
+                                    <th style="text-align: center;">Action</th>
+                                </tr>
+                            </thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="admin-screen" class="screen">
+            <div class="dashboard-header">
+                <div>
+                    <h2>SYSADMIN CONTROL</h2>
+                    <div style="font-size: 0.85rem; color: var(--bbg-text-muted);">
+                        MARKET STATUS: <strong id="admin-market-status" class="text-green">OPEN</strong> | 
+                        SIM DAY: <strong id="admin-sim-day">1</strong>
+                    </div>
+                </div>
+                <div style="text-align: center;">
+                    <div style="font-size: 0.75rem; color: var(--bbg-text-muted); text-transform: uppercase;">Session Timer</div>
+                    <div class="timer-display" id="admin-timer">00:00</div>
+                    <div class="timer-controls">
+                        <input type="number" id="timer-mins" placeholder="Min" style="width: 60px; padding: 4px; text-align: center;" value="15">
+                        <button class="btn-outline" onclick="setTimer()" style="width: 50px; padding: 4px;">SET</button>
+                        <button class="btn-outline" onclick="toggleTimer()" id="timer-toggle-btn" style="width: 60px; padding: 4px;">START</button>
+                    </div>
+                </div>
+                <div style="text-align: right;">
+                    <button class="btn-outline" onclick="toggleMarket()" id="market-toggle-btn" style="width: auto; padding: 6px 15px; margin-right: 10px;">PAUSE MARKET</button>
+                    <button class="btn-outline" onclick="logout()" style="width: auto; padding: 6px 15px;">EXIT</button>
+                </div>
+            </div>
+
+            <div class="grid-container">
+                <div class="panel">
+                    <h3>LIVE LEADERBOARD (70/30 WEIGHTED)</h3>
+                    <table id="leaderboard-table">
+                        <thead>
+                            <tr>
+                                <th>Rnk</th>
+                                <th>Desk Name</th>
+                                <th>Net Worth</th>
+                                <th>5D Ret</th>
+                                <th>Inception Ret</th>
+                                <th>Score</th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                    
+                    <button class="btn-primary" onclick="triggerReveal()" style="margin-top: 30px; font-size: 1rem;">TERMINATE SESSION & REVEAL RESULTS</button>
+                </div>
+
+                <div class="panel">
+                    <h3>MACROECONOMIC INJECTIONS</h3>
+                    <p style="font-size: 0.8rem; color: var(--bbg-text-muted); margin-bottom: 15px;">Force systemic market shifts across all equities.</p>
+                    
+                    <button class="btn-outline" onclick="triggerEvent('recession')" style="text-align: left; border-left: 3px solid var(--bbg-red);">GLOBAL RECESSION (BEAR)</button>
+                    <button class="btn-outline" onclick="triggerEvent('tech_boom')" style="text-align: left; border-left: 3px solid var(--bbg-green);">TECH SECTOR BOOM</button>
+                    <button class="btn-outline" onclick="triggerEvent('rate_hike')" style="text-align: left; border-left: 3px solid var(--bbg-orange);">INTEREST RATE HIKE</button>
+                    <button class="btn-outline" onclick="triggerEvent('inflation')" style="text-align: left; border-left: 3px solid #8b5cf6;">INFLATION SPIKE (VOLATILITY)</button>
+                    <button class="btn-outline" onclick="triggerEvent('recovery')" style="text-align: left; border-left: 3px solid var(--bbg-blue); margin-top: 15px;">MARKET RECOVERY</button>
+                </div>
+            </div>
+        </div>
+
+        <div id="winner-screen" class="screen winner-screen">
+            <h1>MARKET CLOSE: FINAL RESULTS</h1>
+            <div id="winner-cards-container"></div>
+            <button class="btn-outline" onclick="location.reload()" style="max-width: 250px; margin-top: 50px;">RESET TERMINAL</button>
+        </div>
+
+    </div>
+
+    <script>
+        // --- DATA MODELS ---
+        const initialCash = 100000;
+        let simDay = 1;
+        let isMarketOpen = true;
+        let marketInterval;
+        let currentRole = null;
+        let chartInstance = null;
+        
+        // Timer State
+        let timerSeconds = 0;
+        let isTimerRunning = false;
+        let timerInterval;
+
+        const teams = {
+            team1: { name: "Alpha Capital", cash: initialCash, holdings: {}, history: [initialCash] },
+            team2: { name: "Beta Ventures", cash: initialCash, holdings: {}, history: [initialCash] },
+            team3: { name: "Gamma Holdings", cash: initialCash, holdings: {}, history: [initialCash] }
+        };
+
+        const stocks = [
+            { ticker: "VLX", name: "Veltrix Corp", sector: "Tech", price: 120.50, volatility: 0.04, trend: 0.001, history: [] },
+            { ticker: "ARI", name: "Aurion Ind", sector: "Industrial", price: 85.20, volatility: 0.015, trend: 0.0005, history: [] },
+            { ticker: "NEX", name: "Nexus Dynamics", sector: "Tech", price: 210.00, volatility: 0.05, trend: 0.002, history: [] },
+            { ticker: "CST", name: "Capstone Retail", sector: "Retail", price: 45.30, volatility: 0.02, trend: -0.001, history: [] },
+            { ticker: "LUM", name: "Lumina Energy", sector: "Energy", price: 60.00, volatility: 0.025, trend: 0.000, history: [] },
+            { ticker: "QNT", name: "Quantus Fin", sector: "Finance", price: 150.10, volatility: 0.018, trend: 0.001, history: [] },
+            { ticker: "STR", name: "Stratos Aero", sector: "Industrial", price: 310.45, volatility: 0.03, trend: 0.0015, history: [] },
+            { ticker: "BLW", name: "BlueWave Health", sector: "Healthcare", price: 95.60, volatility: 0.01, trend: 0.002, history: [] },
+            { ticker: "OMN", name: "OmniLogistics", sector: "Transport", price: 55.00, volatility: 0.02, trend: 0.0005, history: [] },
+            { ticker: "VRT", name: "Vertex Mat", sector: "Industrial", price: 40.20, volatility: 0.025, trend: -0.0005, history: [] },
+            { ticker: "SYN", name: "Synergy Bio", sector: "Healthcare", price: 18.50, volatility: 0.08, trend: 0.001, history: [] },
+            { ticker: "ZNT", name: "Zenith Real Est", sector: "Real Estate", price: 110.00, volatility: 0.012, trend: 0.000, history: [] },
+            { ticker: "PRM", name: "Prime Consumer", sector: "Retail", price: 75.80, volatility: 0.015, trend: 0.001, history: [] },
+            { ticker: "GLB", name: "Global Networks", sector: "Tech", price: 190.25, volatility: 0.035, trend: 0.001, history: [] },
+            { ticker: "AXI", name: "Axiom Utilities", sector: "Energy", price: 65.40, volatility: 0.008, trend: 0.0002, history: [] }
+        ];
+
+        stocks.forEach(s => s.history.push(s.price));
+
+        // --- UTILS ---
+        function formatCurrency(num) { return num.toLocaleString('en-US', {style: 'currency', currency: 'USD'}); }
+        function formatPercent(num) { return (num * 100).toFixed(2) + '%'; }
+        function formatTime(secs) {
+            const m = Math.floor(secs / 60).toString().padStart(2, '0');
+            const s = (secs % 60).toString().padStart(2, '0');
+            return `${m}:${s}`;
+        }
+
+        function showToast(message) {
+            const area = document.getElementById('notification-area');
+            const toast = document.createElement('div');
+            toast.className = 'toast';
+            toast.innerHTML = `<strong style="color: var(--bbg-orange);">SYS_MSG:</strong> ${message}`;
+            area.appendChild(toast);
+            setTimeout(() => toast.remove(), 4000);
+        }
+
+        // --- TICKER TAPE LOGIC ---
+        function updateTicker() {
+            const tickerEl = document.getElementById('ticker-bar');
+            let htmlChunk = '';
+            
+            stocks.forEach(stock => {
+                const prev = stock.history.length > 1 ? stock.history[stock.history.length - 2] : stock.price;
+                const chg = (stock.price - prev) / prev;
+                const colorClass = chg >= 0 ? 'text-green' : 'text-red';
+                const sign = chg >= 0 ? '▲' : '▼';
+                
+                htmlChunk += `
+                    <div class="ticker-item">
+                        <span class="symbol">${stock.ticker}</span>
+                        <span class="price">${stock.price.toFixed(2)}</span>
+                        <span class="${colorClass}">${sign} ${Math.abs(chg*100).toFixed(2)}%</span>
+                    </div>
+                `;
+            });
+            
+            // Duplicate the chunk to create a seamless infinite scroll loop
+            tickerEl.innerHTML = htmlChunk + htmlChunk;
+        }
+
+        // --- CORE NAVIGATION ---
+        function switchScreen(screenId) {
+            document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+            document.getElementById(screenId).classList.add('active');
+        }
+
+        function login() {
+            currentRole = document.getElementById('role-select').value;
+            if (currentRole === 'admin') {
+                switchScreen('admin-screen');
+                document.getElementById('global-status').innerText = 'ADMIN_MODE_ACTIVE';
+                document.getElementById('global-status').style.color = 'var(--bbg-orange)';
+                updateAdminDashboard();
+            } else {
+                switchScreen('participant-screen');
+                document.getElementById('team-name-display').innerText = teams[currentRole].name.toUpperCase();
+                document.getElementById('global-status').innerText = 'DESK_CONNECTED';
+                document.getElementById('global-status').style.color = 'var(--bbg-green)';
+                initChart();
+                updateParticipantDashboard();
+            }
+            if(!marketInterval) startMarket();
+            updateTicker();
+        }
+
+        function logout() {
+            currentRole = null;
+            document.getElementById('global-status').innerText = 'SYSTEM READY';
+            document.getElementById('global-status').style.color = 'var(--bbg-text-muted)';
+            switchScreen('login-screen');
+        }
+
+        // --- TIMER LOGIC ---
+        function setTimer() {
+            const mins = parseInt(document.getElementById('timer-mins').value) || 0;
+            timerSeconds = mins * 60;
+            updateTimerDisplays();
+        }
+
+        function toggleTimer() {
+            const btn = document.getElementById('timer-toggle-btn');
+            if(isTimerRunning) {
+                clearInterval(timerInterval);
+                isTimerRunning = false;
+                btn.innerText = "START";
+                btn.style.color = "var(--bbg-text-main)";
+            } else {
+                if(timerSeconds <= 0) return alert("Set valid time.");
+                isTimerRunning = true;
+                btn.innerText = "PAUSE";
+                btn.style.color = "var(--bbg-orange)";
+                timerInterval = setInterval(() => {
+                    timerSeconds--;
+                    updateTimerDisplays();
+                    if(timerSeconds <= 0) {
+                        clearInterval(timerInterval);
+                        isTimerRunning = false;
+                        triggerReveal(); 
+                    }
+                }, 1000);
+            }
+        }
+
+        function updateTimerDisplays() {
+            const timeStr = formatTime(timerSeconds);
+            document.getElementById('admin-timer').innerText = timeStr;
+            document.getElementById('participant-timer').innerText = timeStr;
+        }
+
+        // --- MARKET LOGIC ---
+        function startMarket() {
+            isMarketOpen = true;
+            marketInterval = setInterval(() => {
+                simDay++;
+                
+                stocks.forEach(stock => {
+                    const change = stock.price * (stock.trend + (Math.random() - 0.5) * stock.volatility);
+                    let newPrice = stock.price + change;
+                    if(newPrice < 1) newPrice = 1; 
+                    stock.price = newPrice;
+                    stock.history.push(newPrice);
+                    if(stock.history.length > 50) stock.history.shift(); 
+                });
+
+                Object.values(teams).forEach(team => {
+                    team.history.push(getPortfolioValueObj(team));
+                    if(team.history.length > 50) team.history.shift();
+                });
+
+                updateTicker();
+
+                if(currentRole === 'admin') updateAdminDashboard();
+                else if (currentRole && currentRole !== 'admin') updateParticipantDashboard();
+                
+            }, 4000); 
+        }
+
+        function toggleMarket() {
+            const btn = document.getElementById('market-toggle-btn');
+            const statusLabel = document.getElementById('market-status');
+            const adminStatusLabel = document.getElementById('admin-market-status');
+            
+            if (isMarketOpen) {
+                clearInterval(marketInterval);
+                isMarketOpen = false;
+                btn.innerText = "RESUME MARKET";
+                btn.style.color = "var(--bbg-green)";
+                if(statusLabel) { statusLabel.innerText = "HALTED"; statusLabel.className = "text-red"; }
+                if(adminStatusLabel) { adminStatusLabel.innerText = "HALTED"; adminStatusLabel.className = "text-red"; }
+                showToast("MARKET TRADING HALTED");
+            } else {
+                startMarket();
+                btn.innerText = "PAUSE MARKET";
+                btn.style.color = "var(--bbg-text-main)";
+                if(statusLabel) { statusLabel.innerText = "OPEN"; statusLabel.className = "text-green"; }
+                if(adminStatusLabel) { adminStatusLabel.innerText = "OPEN"; adminStatusLabel.className = "text-green"; }
+                showToast("MARKET TRADING RESUMED");
+            }
+        }
+
+        function triggerEvent(type) {
+            let msg = "";
+            stocks.forEach(stock => {
+                if(type === 'recession') {
+                    stock.trend = -0.015;
+                    stock.volatility *= 1.5;
+                    msg = "MACRO ALERT: GLOBAL RECESSION CONFIRMED.";
+                } else if (type === 'tech_boom' && stock.sector === 'Tech') {
+                    stock.trend = 0.025;
+                    msg = "SECTOR ALERT: TECH GROWTH ACCELERATING.";
+                } else if (type === 'rate_hike') {
+                    stock.price *= 0.90; 
+                    msg = "POLICY ALERT: CENTRAL BANK RATE HIKE (+50 BPS).";
+                } else if (type === 'inflation') {
+                    stock.volatility = 0.08; 
+                    msg = "DATA ALERT: CPI PRINTS HOT. VOLATILITY SPIKE.";
+                } else if (type === 'recovery') {
+                    stock.trend = 0.002;
+                    stock.volatility = 0.02;
+                    msg = "MACRO ALERT: EQUITIES ENTERING RECOVERY CYCLE.";
+                }
+            });
+            showToast(msg);
+            updateTicker();
+            if(currentRole === 'admin') updateAdminDashboard();
+            else if (currentRole && currentRole !== 'admin') updateParticipantDashboard();
+        }
+
+        // --- TRADING LOGIC ---
+        function buyStock(ticker) {
+            if(!isMarketOpen) return showToast("ERR: TRADING HALTED.");
+            const stock = stocks.find(s => s.ticker === ticker);
+            const team = teams[currentRole];
+            if (team.cash >= stock.price) {
+                team.cash -= stock.price;
+                if(!team.holdings[ticker]) team.holdings[ticker] = { shares: 0, totalCost: 0 };
+                team.holdings[ticker].shares += 1;
+                team.holdings[ticker].totalCost += stock.price;
+                updateParticipantDashboard();
+            } else {
+                showToast("ERR: INSUFFICIENT LIQUIDITY.");
+            }
+        }
+
+        function sellStock(ticker) {
+            if(!isMarketOpen) return showToast("ERR: TRADING HALTED.");
+            const stock = stocks.find(s => s.ticker === ticker);
+            const team = teams[currentRole];
+            if (team.holdings[ticker] && team.holdings[ticker].shares > 0) {
+                team.cash += stock.price;
+                team.holdings[ticker].shares -= 1;
+                if(team.holdings[ticker].shares === 0) delete team.holdings[ticker];
+                updateParticipantDashboard();
+            }
+        }
+
+        function getPortfolioValueObj(team) {
+            let holdingsValue = 0;
+            for (let ticker in team.holdings) {
+                const stock = stocks.find(s => s.ticker === ticker);
+                holdingsValue += team.holdings[ticker].shares * stock.price;
+            }
+            return team.cash + holdingsValue;
+        }
+
+        function calculateReturns(team) {
+            const currentVal = getPortfolioValueObj(team);
+            const longTerm = (currentVal - initialCash) / initialCash;
+            const shortTermHistIndex = Math.max(0, team.history.length - 6);
+            const pastVal = team.history[shortTermHistIndex] || initialCash;
+            const shortTerm = (currentVal - pastVal) / pastVal;
+            return { currentVal, longTerm, shortTerm };
+        }
+
+        // --- UI UPDATES ---
+        function updateParticipantDashboard() {
+            document.getElementById('sim-day-display').innerText = simDay;
+            const team = teams[currentRole];
+            document.getElementById('cash-balance').innerText = formatCurrency(team.cash);
+            
+            const rets = calculateReturns(team);
+            document.getElementById('portfolio-value').innerText = formatCurrency(rets.currentVal);
+            
+            const ltEl = document.getElementById('long-term-return');
+            ltEl.innerText = formatPercent(rets.longTerm);
+            ltEl.className = `font-mono ${rets.longTerm >= 0 ? 'text-green' : 'text-red'}`;
+
+            const stEl = document.getElementById('short-term-return');
+            stEl.innerText = formatPercent(rets.shortTerm);
+            stEl.className = `font-mono ${rets.shortTerm >= 0 ? 'text-green' : 'text-red'}`;
+
+            // Market Table
+            const marketBody = document.querySelector('#market-table tbody');
+            marketBody.innerHTML = '';
+            stocks.forEach(stock => {
+                const prev = stock.history.length > 1 ? stock.history[stock.history.length - 2] : stock.price;
+                const chg = (stock.price - prev) / prev;
+                const color = chg >= 0 ? 'text-green' : 'text-red';
+                const sign = chg >= 0 ? '+' : '';
+                
+                marketBody.innerHTML += `
+                    <tr>
+                        <td style="font-weight:bold; color:var(--bbg-text-main);">${stock.ticker}</td>
+                        <td style="color:var(--bbg-text-muted);">${stock.name}</td>
+                        <td class="font-mono">${stock.price.toFixed(2)}</td>
+                        <td class="font-mono ${color}">${sign}${(chg*100).toFixed(2)}%</td>
+                        <td style="text-align: center;">
+                            <button class="btn-buy" onclick="buyStock('${stock.ticker}')" style="padding: 4px 8px; width: auto; font-size: 0.75rem;">BUY</button>
+                        </td>
+                    </tr>
+                `;
+            });
+
+            // Portfolio Table
+            const portBody = document.querySelector('#portfolio-table tbody');
+            portBody.innerHTML = '';
+            for(let ticker in team.holdings) {
+                const data = team.holdings[ticker];
+                const avgCost = data.totalCost / data.shares;
+                portBody.innerHTML += `
+                    <tr>
+                        <td style="font-weight:bold; color:var(--bbg-text-main);">${ticker}</td>
+                        <td class="font-mono">${data.shares}</td>
+                        <td class="font-mono">${avgCost.toFixed(2)}</td>
+                        <td style="text-align: center;">
+                            <button class="btn-sell" onclick="sellStock('${ticker}')" style="padding: 4px 8px; width: auto; font-size: 0.75rem;">SELL</button>
+                        </td>
+                    </tr>
+                `;
+            }
+
+            updateChart();
+        }
+
+        function updateAdminDashboard() {
+            document.getElementById('admin-sim-day').innerText = simDay;
+            const tbody = document.querySelector('#leaderboard-table tbody');
+            tbody.innerHTML = '';
+            
+            let rankings = Object.keys(teams).map(id => {
+                const rets = calculateReturns(teams[id]);
+                const combinedScore = (rets.longTerm * 0.7) + (rets.shortTerm * 0.3);
+                return { id, name: teams[id].name, ...rets, score: combinedScore };
+            }).sort((a,b) => b.score - a.score);
+
+            rankings.forEach((r, index) => {
+                const stColor = r.shortTerm >= 0 ? 'text-green' : 'text-red';
+                const ltColor = r.longTerm >= 0 ? 'text-green' : 'text-red';
+                const stSign = r.shortTerm >= 0 ? '+' : '';
+                const ltSign = r.longTerm >= 0 ? '+' : '';
+                const highlight = index === 0 ? 'color: var(--bbg-orange); font-weight: bold;' : '';
+
+                tbody.innerHTML += `
+                    <tr>
+                        <td class="font-mono" style="${highlight}">${index + 1}</td>
+                        <td style="text-transform: uppercase; ${highlight}">${r.name}</td>
+                        <td class="font-mono" style="${highlight}">${formatCurrency(r.currentVal)}</td>
+                        <td class="font-mono ${stColor}">${stSign}${(r.shortTerm*100).toFixed(2)}%</td>
+                        <td class="font-mono ${ltColor}">${ltSign}${(r.longTerm*100).toFixed(2)}%</td>
+                        <td class="font-mono" style="color: var(--bbg-text-muted);">${(r.score*100).toFixed(3)}</td>
+                    </tr>
+                `;
+            });
+        }
+
+        // --- END OF SESSION / WINNERS ---
+        function triggerReveal() {
+            if(isMarketOpen) toggleMarket(); 
+            if(isTimerRunning) toggleTimer(); 
+            
+            switchScreen('winner-screen');
+            document.getElementById('global-status').innerText = 'SESSION TERMINATED';
+            document.getElementById('global-status').style.color = 'var(--bbg-orange)';
+            
+            let rankings = Object.keys(teams).map(id => {
+                const rets = calculateReturns(teams[id]);
+                const combinedScore = (rets.longTerm * 0.7) + (rets.shortTerm * 0.3);
+                return { name: teams[id].name, val: rets.currentVal, lt: rets.longTerm, score: combinedScore };
+            }).sort((a,b) => b.score - a.score);
+
+            const container = document.getElementById('winner-cards-container');
+            container.innerHTML = '';
+            
+            rankings.forEach((r, idx) => {
+                const cls = idx === 0 ? 'first-place' : '';
+                const medal = idx === 0 ? 'RNK 1' : `RNK ${idx + 1}`;
+                container.innerHTML += `
+                    <div class="winner-card ${cls}">
+                        <div style="display:flex; align-items: center; gap: 15px;">
+                            <span class="font-mono" style="font-size: 1.5rem; font-weight: bold; color: ${idx===0 ? 'var(--bbg-orange)' : 'var(--bbg-text-muted)'};">${medal}</span>
+                            <h3 style="text-transform: uppercase;">${r.name}</h3>
+                        </div>
+                        <div style="text-align: right;">
+                            <div class="font-mono" style="font-size: 1.5rem; font-weight: bold;">${formatCurrency(r.val)}</div>
+                            <div class="font-mono" style="font-size: 0.85rem; color: var(--bbg-text-muted);">INCEP RET: ${(r.lt*100).toFixed(2)}%</div>
+                        </div>
+                    </div>
+                `;
+            });
+        }
+
+        // --- CHARTING ---
+        function initChart() {
+            if(chartInstance) chartInstance.destroy();
+            const ctx = document.getElementById('marketChart').getContext('2d');
+            
+            // Bloomberg inspired colors: Orange, Blue, Green, Purple
+            const colors = ['#f37021', '#007aff', '#00e676', '#8b5cf6'];
+            
+            chartInstance = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: Array.from({length: 50}, (_, i) => i + 1),
+                    datasets: stocks.slice(0, 4).map((stock, i) => ({
+                        label: stock.ticker,
+                        data: stock.history,
+                        borderColor: colors[i],
+                        borderWidth: 1.5,
+                        tension: 0, 
+                        pointRadius: 0
+                    }))
+                },
+                options: { 
+                    responsive: true, 
+                    maintainAspectRatio: false, 
+                    animation: false, 
+                    interaction: { mode: 'index', intersect: false },
+                    scales: { 
+                        x: { display: false }, 
+                        y: { 
+                            grid: { color: '#2a2a2a', drawBorder: false }, 
+                            ticks: { color: '#888', font: {family: 'SF Mono, Consolas, monospace', size: 10} },
+                            position: 'right'
+                        } 
+                    }, 
+                    plugins: { 
+                        legend: { 
+                            labels: { color: '#f5f5f5', boxWidth: 10, font: {size: 10} } 
+                        },
+                        tooltip: { backgroundColor: '#111', borderColor: '#2a2a2a', borderWidth: 1, titleFont: {family: 'SF Mono'}, bodyFont: {family: 'SF Mono'} }
+                    } 
+                }
+            });
+        }
+
+        function updateChart() {
+            if(!chartInstance) return;
+            chartInstance.data.datasets.forEach(dataset => {
+                const stock = stocks.find(s => s.ticker === dataset.label);
+                dataset.data = [...stock.history];
+            });
+            chartInstance.update();
+        }
+    </script>
+</body>
+</html>
